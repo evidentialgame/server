@@ -1,0 +1,34 @@
+// Main game protocol spec
+// (c) Ethan Davis 2019
+
+// Types
+
+def player private
+string name
+boolean typing
+
+def messageSegment private
+string text
+string color
+
+// Server => Client
+
+def updateGame
+list players of=player
+
+def notify
+string message
+
+def message
+list segments of=messageSegment
+
+// Client => Server
+
+def login
+string name
+
+def sendChat
+string message
+
+def setTyping
+boolean typing
