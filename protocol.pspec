@@ -16,11 +16,16 @@ string color
 def updateGame
 list players of=player
 
-def notify
+def loginStatus
+boolean success
 string message
 
 def message
 list segments of=messageSegment
+
+def title
+string title
+string subtitle
 
 // Client => Server
 
@@ -28,7 +33,7 @@ def login
 string name
 
 def sendChat
-string message
+string message encoding=ascii
 
 def setTyping
 boolean typing

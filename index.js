@@ -19,6 +19,14 @@ const fastMessage = (contents) => {
 	}
 }
 
+const gameState = {
+	'mode': 'waitingForPlayers',
+	'title': {
+		'title': '',
+		'subtitle': ''
+	}
+}
+
 const clients = []
 
 const sendAllClients = (name, data) => {
@@ -36,7 +44,32 @@ const updateClients = () => {
 			}
 		})
 	})
+
+	sendAllClients('title', gameState.title)
 }
+
+const gameLoop = () => {
+	if (gameState.mode === 'waitingForPlayers') {
+		gameState.title = {
+			'title': 'Waiting to start.',
+			'subtitle': clients.length + ' / 5 players'
+		}
+
+		if (clients.length >= 5) {
+			gameState.mode = 'selecting'
+		}
+	}
+	else if (gameState.mode === 'selecting') {
+		gameState.title = {
+			'title': 'Selecting.',
+			'subtitle': 'A player is selecting.'
+		}
+	}
+
+	updateClients()
+}
+
+setInterval(gameLoop, 1000)
 
 const server = net.createServer((socket) => {
 	const abstractor = abstractorFactory()
@@ -70,13 +103,51 @@ const server = net.createServer((socket) => {
 	abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Welcome! Be friendly in-game.', '#EFEFE7']]))
 	
 	abstractor.on('login', (data) => {
-		console.log('Login as ' + data.name + ' from user.')
+		if (data.name.length < 1) {
+			abstractor.send('loginStatus', {
+				'success': false,
+				'message': 'Please choose a name!'
+			})
+
+			return
+		}
+
+		if (data.name.length > 10) {
+			abstractor.send('loginStatus', {
+				'success': false,
+				'message': 'That name is too long.'
+			})
+
+			return
+		}
+
+		if (clients.length >= 5) {
+			abstractor.send('loginStatus', {
+				'success': false,
+				'message': 'This game is full.'
+			})
+
+			return
+		}
+
+		console.log('Login as \'' + data.name + '\' from user.')
 		
 		socket.data.username = data.name
 		socket.data.loggedIn = true
 		socket.data.typing = false
+
+		abstractor.send('loginStatus', {
+			'success': true,
+			'message': ''
+		})
 		
 		clients.push(socket)
+
+		socket.on('close', () => {
+			clients.splice(clients.indexOf(socket), 1)
+
+			updateClients()
+		})
 		
 		sendAllClients('message', fastMessage([['+ ', '#FFDC00'], [socket.data.username, '#FFDC00'], [' has joined the game.', '#EFEFE7']]))
 		
