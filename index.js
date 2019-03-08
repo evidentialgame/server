@@ -191,16 +191,23 @@ const server = net.createServer((socket) => {
 				abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Transferred bytes: ' + socket.data.transferredBytes, '#FFFFFF']]))
 			}
 			else if (command === 'w' || command === 'whisper') {
-				const destination = clients.find((client) => client.data.username === segs[1])
 				if (segs.length < 3) {
 					abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Usage: /w [player] [message]', '#E83338']]))
 					
 					return
 				}
+
+				const destination = clients.find((client) => client.data.username.toLowerCase() === segs[1].toLowerCase())
 				
 				const messageContent = segs.slice(2).join(' ')
 				
 				if (destination) {
+					if (destination === socket) {
+						abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Error: You can\'t whisper to yourself!', '#E83338']]))
+
+						return
+					}
+
 					destination.abstractor.send('message', fastMessage([[socket.data.username, '#FFDC00'], [' > ', '#EFEFE7'], ['me', '#FFDC00'], [': ' + messageContent, '#EFEFE7']]))
 					
 					abstractor.send('message', fastMessage([['me', '#FFDC00'], [' > ', '#EFEFE7'], [socket.data.username, '#FFDC00'], [': ' + messageContent, '#EFEFE7']]))
