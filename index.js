@@ -210,7 +210,7 @@ const server = net.createServer((socket) => {
 
 					destination.abstractor.send('message', fastMessage([[socket.data.username, '#FFDC00'], [' > ', '#EFEFE7'], ['me', '#FFDC00'], [': ' + messageContent, '#EFEFE7']]))
 					
-					abstractor.send('message', fastMessage([['me', '#FFDC00'], [' > ', '#EFEFE7'], [socket.data.username, '#FFDC00'], [': ' + messageContent, '#EFEFE7']]))
+					abstractor.send('message', fastMessage([['me', '#FFDC00'], [' > ', '#EFEFE7'], [destination.data.username, '#FFDC00'], [': ' + messageContent, '#EFEFE7']]))
 				}
 				else {
 					abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Error: That player doesn\'t exist.', '#E83338']]))
