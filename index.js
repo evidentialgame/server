@@ -83,13 +83,13 @@ const server = net.createServer((socket) => {
 	socket.on('data', (chunk) => {
 		socket.data.transferredBytes += chunk.length
 		
-		console.log('chunk ' + chunk.length + ' client => server')
+		//console.log('chunk ' + chunk.length + ' client => server')
 	})
 	
 	abstractor.on('data', (chunk) => {
 		socket.data.transferredBytes += chunk.length
 		
-		console.log('chunk ' + chunk.length + ' server => client')
+		//console.log('chunk ' + chunk.length + ' server => client')
 	})
 	
 	socket.pipe(abstractor)
@@ -129,6 +129,24 @@ const server = net.createServer((socket) => {
 
 			return
 		}
+		
+		if (clients.findIndex((client) => client.data.username.toLowerCase() === data.name.toLowerCase()) !== -1) {
+			abstractor.send('loginStatus', {
+				'success': false,
+				'message': 'That name is taken.'
+			})
+			
+			return
+		}
+		
+		if (/[^A-Za-z0-9]/g.test(data.name)) {
+			abstractor.send('loginStatus', {
+				'success': false,
+				'message': 'Names cannot contain spaces or special characters.'
+			})
+			
+			return
+		}
 
 		console.log('Login as \'' + data.name + '\' from user.')
 		
@@ -143,7 +161,9 @@ const server = net.createServer((socket) => {
 		
 		clients.push(socket)
 
-		socket.on('close', () => {
+		socket.once('close', () => {
+			console.log('Socket disconnected.')
+			
 			clients.splice(clients.indexOf(socket), 1)
 
 			updateClients()
@@ -152,12 +172,6 @@ const server = net.createServer((socket) => {
 		sendAllClients('message', fastMessage([['+ ', '#FFDC00'], [socket.data.username, '#FFDC00'], [' has joined the game.', '#EFEFE7']]))
 		
 		updateClients()
-		
-		socket.on('close', () => {
-			console.log('Socket disconnected.')
-			
-			clients.splice(clients.indexOf(socket), 1)
-		})
 	})
 	
 	abstractor.on('setTyping', (data) => {
