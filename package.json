@@ -10,6 +10,6 @@
   "author": "Ethan Davis",
   "license": "UNLICENSED",
   "dependencies": {
-    "protocore": "^3.1.0"
+    "protocore": "^3.2.0"
   }
 }

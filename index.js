@@ -23,8 +23,11 @@ const gameState = {
 	'mode': 'waitingForPlayers',
 	'title': {
 		'title': '',
-		'subtitle': ''
-	}
+		'subtitle': '',
+		'boardText': ''
+	},
+	'background': 'images/backgrounds/station.png',
+	'weather': 0
 }
 
 const clients = []
@@ -40,9 +43,13 @@ const updateClients = () => {
 		'players': clients.map((client) => {
 			return {
 				'name': client.data.username,
-				'typing': client.data.typing
+				'skin': client.data.skin,
+				'typing': client.data.typing,
+				'selected': client.data.currentlySelected
 			}
-		})
+		}),
+		'background': gameState.background,
+		'weather': gameState.weather
 	})
 
 	sendAllClients('title', gameState.title)
@@ -52,8 +59,11 @@ const gameLoop = () => {
 	if (gameState.mode === 'waitingForPlayers') {
 		gameState.title = {
 			'title': 'Waiting to start.',
-			'subtitle': clients.length + ' / 5 players'
+			'subtitle': clients.length + ' / 5 players',
+			'boardText': 'Waiting...'
 		}
+		
+		gameState.background = 'images/backgrounds/station.png'
 
 		if (clients.length >= 5) {
 			gameState.mode = 'selecting'
@@ -62,7 +72,8 @@ const gameLoop = () => {
 	else if (gameState.mode === 'selecting') {
 		gameState.title = {
 			'title': 'Selecting.',
-			'subtitle': 'A player is selecting.'
+			'subtitle': 'A player is selecting.',
+			'boardText': clients.filter((client) => client.data.selected === true).join(', ')
 		}
 	}
 
@@ -97,7 +108,9 @@ const server = net.createServer((socket) => {
 	
 	socket.data = {
 		'loggedIn': false,
-		'transferredBytes': 0
+		'transferredBytes': 0,
+		'selected': [],
+		'currentlySelected': false
 	}
 	
 	abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Welcome! Be friendly in-game.', '#EFEFE7']]))
@@ -152,6 +165,7 @@ const server = net.createServer((socket) => {
 		
 		socket.data.username = data.name
 		socket.data.loggedIn = true
+		socket.data.skin = ['officer', 'detective'][Math.floor(Math.random() * 2)]
 		socket.data.typing = false
 
 		abstractor.send('loginStatus', {
@@ -242,6 +256,33 @@ const server = net.createServer((socket) => {
 		for (let i = 0; i < clients.length; i++) {
 			clients[i].abstractor.send('message', fastMessage([['[', '#FFFFFF'], [socket.data.username, '#FFDC00'], ['] ', '#FFFFFF'], [data.message, '#FFFFFF']]))
 		}
+	})
+	
+	abstractor.on('select', (data) => {
+		if (data.index > clients.length - 1) {
+			socket.abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Error: Player index ' + data.index + ' ( / ' + clients.length + ') out of bounds! Are you experiencing latency?', '#E83338']]))
+			
+			return
+		}
+		
+		const selectClient = clients[data.index]
+		
+		if (socket.data.selected.includes(selectClient)) {
+			socket.data.selected.splice(socket.data.selected.indexOf(selectClient), 1)
+			
+			selectClient.data.currentlySelected = false
+			
+			socket.abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Deselected ', '#FFFFFF'], [selectClient.data.username, '#FFDC00']]))
+		}
+		else {
+			socket.data.selected.push(selectClient)
+			
+			selectClient.data.currentlySelected = true
+			
+			socket.abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Selected ', '#FFFFFF'], [selectClient.data.username, '#FFDC00']]))
+		}
+		
+		updateClients()
 	})
 })
 

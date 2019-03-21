@@ -5,7 +5,9 @@
 
 def player private
 string name
+string skin
 boolean typing
+boolean selected
 
 def messageSegment private
 string text
@@ -15,6 +17,8 @@ string color
 
 def updateGame
 list players of=player
+string background
+uint weather size=8
 
 def loginStatus
 boolean success
@@ -26,11 +30,15 @@ list segments of=messageSegment
 def title
 string title
 string subtitle
+string boardText
 
 // Client => Server
 
 def login
 string name
+
+def select
+int index size=8
 
 def sendChat
 string message encoding=ascii
