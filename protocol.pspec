@@ -19,10 +19,21 @@ def updateGame
 list players of=player
 string background
 uint weather size=8
+uint vignette size=8
 
 def loginStatus
 boolean success
 string message
+
+def setVoteUI
+boolean display
+
+def setTamperUI
+boolean display
+boolean canTamper
+
+def transition
+varint ms
 
 def message
 list segments of=messageSegment
@@ -31,6 +42,9 @@ def title
 string title
 string subtitle
 string boardText
+string titleColor
+string subtitleColor
+uint displayMode size=8
 
 // Client => Server
 
@@ -41,7 +55,13 @@ def select
 int index size=8
 
 def sendChat
-string message encoding=ascii
+string message
+
+def vote
+boolean value
+
+def setTampering
+boolean tampering
 
 def setTyping
 boolean typing
