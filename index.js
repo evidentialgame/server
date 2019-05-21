@@ -33,34 +33,47 @@ const gameState = {
 	'weather': 0,
 	'vignette': 120,
 	'selecting': 0,
+	'size': 5,
 	'teams': [
 		{
 			'size': 2,
 			'requiredToTamper': 1,
-			'members': []
+			'members': [],
+			'hasPlayed': false,
+			'victor': null
 		},
 		{
 			'size': 3,
 			'requiredToTamper': 1,
-			'members': []
+			'members': [],
+			'hasPlayed': false,
+			'victor': null
 		},
 		{
 			'size': 2,
 			'requiredToTamper': 1,
-			'members': []
-		},
-		{
-			'size': 3,
-			'requiredToTamper': 2,
-			'members': []
+			'members': [],
+			'hasPlayed': false,
+			'victor': null
 		},
 		{
 			'size': 3,
 			'requiredToTamper': 1,
-			'members': []
+			'members': [],
+			'hasPlayed': false,
+			'victor': null
+		},
+		{
+			'size': 3,
+			'requiredToTamper': 1,
+			'members': [],
+			'hasPlayed': false,
+			'victor': null
 		}
 	],
-	'currentTeam': 0
+	'currentTeam': 0,
+	'names': ['Edward', 'James', 'Riley', 'Harley', 'Ethan', 'Ryan', 'Caden', 'Blair', 'Jordan', 'Bailey', 'Phineas', 'Cornelius', 'Ezekiel'],
+	'currentNameIndex': Math.floor(Math.random() * 13)
 }
 
 const clients = []
@@ -72,15 +85,41 @@ const sendAllClients = (name, data) => {
 }
 
 const updateClients = () => {
+	const sendableTeams = gameState.teams.map((team, i) => {
+		return {
+			'size': team.size,
+			'requiredToTamper': team.requiredToTamper,
+			'hasPlayed': team.hasPlayed,
+			'current': i === gameState.currentTeam,
+			'victor': typeof team.victor === 'string' ? team.victor : ''
+		}
+	})
+	
 	sendAllClients('updateGame', {
 		'players': (gameState.mode === 'crimeScene' || gameState.mode === 'showInvestigationResults' ? clients.filter((client) => client.data.selected === true) : clients).map((client) => client.data),
 		'background': gameState.background,
 		'weather': gameState.weather,
-		'vignette': gameState.vignette
+		'vignette': gameState.vignette,
+		'teams': sendableTeams
 	})
 
-	if (gameState.mode !== 'setRoles') {
+	if (gameState.mode !== 'setRoles' && gameState.mode !== 'selecting') {
 		sendAllClients('title', gameState.title)
+	}
+}
+
+const getWinner = () => {
+	const mafWins = gameState.teams.filter((team) => team.victor === 'mafia').length
+	const officerWins = gameState.teams.filter((team) => team.victor === 'officers').length
+	
+	if (officerWins >= 3) {
+		return 'officers'
+	}
+	else if (mafWins >= 3) {
+		return 'mafia'
+	}
+	else {
+		return null
 	}
 }
 
@@ -132,7 +171,7 @@ const gameLoop = () => {
 	if (gameState.mode === 'waitingForPlayers') {
 		gameState.title = {
 			'title': 'Waiting to start.',
-			'subtitle': clients.length + ' / 5 players',
+			'subtitle': clients.length + ' / ' + gameState.size + ' players',
 			'boardText': 'Waiting...',
 			'titleColor': '#EFEFE7',
 			'subtitleColor': '#EFEFE7',
@@ -143,7 +182,7 @@ const gameLoop = () => {
 		
 		gameState.background = 'images/backgrounds/station.png'
 
-		if (clients.length >= 5) {
+		if (clients.length >= gameState.size) {
 			gameState.mode = 'setRoles'
 		}
 	}
@@ -165,15 +204,26 @@ const gameLoop = () => {
 			'displayMode': 0
 		}
 		
+		const mafiaMembers = clients.filter((client) => client.data.role === 'mafia')
+		
+		const displayMafiaList = mafiaMembers.map((client) => client.data.name).join(', ')
+		
 		for (let i = 0; i < clients.length; i++) {
 			if (clients[i].data.role === 'mafia') {
 				if (firstForMode) {
-					clients[i].abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['You are a member of the mafia.', '#ED553B']]))
+					clients[i].abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['You are ' + clients[i].data.name + ', a member of the mafia.', '#ED553B']]))
+					clients[i].abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Mafia are: ', '#ED553B'], [displayMafiaList, '#ED553B']]))
+					
+					clients[i].abstractor.send('setCard', {
+						'cardImage': 'images/sprites/card/' + clients[i].data.skin + '_mafia.png',
+						'textColor': '#ED553B',
+						'text': 'Mafia: ' + displayMafiaList
+					})
 				}
 
 				clients[i].abstractor.send('title', {
 					'title': 'MAFIA',
-					'subtitle': 'You are a corrupt officer.',
+					'subtitle': 'You are ' + clients[i].data.name + ', a mafia member and corrupt officer.',
 					'boardText': '',
 					'titleColor': '#ED553B',
 					'subtitleColor': '#EFEFE7',
@@ -182,12 +232,18 @@ const gameLoop = () => {
 			}
 			else {
 				if (firstForMode) {
-					clients[i].abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['You are an innocent police officer.', '#47AB6C']]))
+					clients[i].abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['You are ' + clients[i].data.name + ', an innocent police officer.', '#47AB6C']]))
+					
+					clients[i].abstractor.send('setCard', {
+						'cardImage': 'images/sprites/card/' + clients[i].data.skin + '_innocent.png',
+						'textColor': '#47AB6C',
+						'text': 'Officer'
+					})
 				}
 
 				clients[i].abstractor.send('title', {
 					'title': 'Officer',
-					'subtitle': 'You are an innocent police officer.',
+					'subtitle': 'You are ' + clients[i].data.name + ', an innocent police officer.',
 					'boardText': 'Find the mafia!',
 					'titleColor': '#47AB6C',
 					'subtitleColor': '#EFEFE7',
@@ -207,7 +263,11 @@ const gameLoop = () => {
 			gameState.selecting++
 			
 			gameState.selecting %= clients.length
+			
+			currentModeState.timeLeft = 30
 		}
+		
+		currentModeState.timeLeft--
 		
 		gameState.vignette = 120
 		gameState.background = 'images/backgrounds/station.png'
@@ -224,8 +284,33 @@ const gameLoop = () => {
 			'displayMode': 0
 		}
 		
+		for (let i = 0; i < clients.length; i++) {
+			if (clients[i] === clients[gameState.selecting]) {
+				clients[i].abstractor.send('title', {
+					'title': 'YOU ARE SELECTING',
+					'subtitle': 'Click on players to select.',
+					'boardText': selectedClients.length + ' / ' + requiredCount,
+					'titleColor': '#F15C18',
+					'subtitleColor': '#EFEFE7',
+					'displayMode': 0
+				})
+			}
+			else clients[i].abstractor.send('title', gameState.title)
+		}
+		
 		if (selectedClients.length >= requiredCount) {
 			gameState.mode = 'voting'
+		}
+		
+		if (currentModeState.timeLeft <= 0) {
+			sendAllClients('message', fastMessage([['> ', '#FFDC00'], ['The current player has been skipped for taking too long.', '#EFEFE7']]))
+		
+			resetSelecting()
+			
+			gameState.selecting++
+			gameState.selecting %= clients.length
+			
+			currentModeState.timeLeft = 30
 		}
 	}
 	else if (gameState.mode === 'voting') {
@@ -234,14 +319,18 @@ const gameLoop = () => {
 				'display': true
 			})
 			
+			currentModeState.timeLeft = 30
+			
 			sendAllClients('message', fastMessage([['> ', '#FFDC00'], ['Voting on team ', '#EFEFE7'], [clients.filter((client) => client.data.selected).map((client) => client.data.name).join(', '), '#FFDC00'], [' proposed by ', '#EFEFE7'], [clients[gameState.selecting].data.name, '#FFDC00'], ['.', '#EFEFE7']]))
 		}
+		
+		currentModeState.timeLeft--
 		
 		const votedClients = clients.filter((client) => client.data.vote !== null)
 		
 		gameState.title = {
 			'title': 'Voting.',
-			'subtitle': 'This team proposed by ' + clients[gameState.selecting].data.name + '.',
+			'subtitle': 'Team proposed by ' + clients[gameState.selecting].data.name + '.',
 			'boardText': votedClients.length + ' / ' + clients.length,
 			'titleColor': '#EFEFE7',
 			'subtitleColor': '#EFEFE7',
@@ -264,6 +353,13 @@ const gameLoop = () => {
 				'display': false
 			})
 		}
+		
+		if (currentModeState.timeLeft <= 0) {
+			sendAllClients('message', fastMessage([['> ', '#FFDC00'], ['Voting has been skipped for taking too long.', '#EFEFE7']]))
+			sendAllClients('message', fastMessage([['> ', '#FFDC00'], ['Abstainers: ', '#EFEFE7'], [clients.filter((client) => client.data.vote === null).map((client) => client.data.name).join(', '), '#FFDC00'], ['.', '#EFEFE7']]))
+			
+			gameState.mode = 'voteResults'
+		}
 	}
 	else if (gameState.mode === 'voteResults') {
 		const forVoters = clients.filter((client) => client.data.vote === true)
@@ -274,6 +370,10 @@ const gameLoop = () => {
 		if (firstForMode) {
 			sendAllClients('message', fastMessage([['> ', '#FFDC00'], ['The vote ', '#EFEFE7'], (passed ? ['passed', '#47AB6C'] : ['failed', '#ED553B']), ['.', '#EFEFE7']]))
 			sendAllClients('message', fastMessage([['> ', '#FFDC00'], ['The vote was rejected by ', '#EFEFE7'], [(againstVoters.length > 0 ? againstVoters.map((client) => client.data.name).join(', ') : 'no one'), '#FFDC00'], ['.', '#EFEFE7']]))
+		
+			sendAllClients('setVoteUI', {
+				'display': false
+			})
 		}
 		
 		gameState.title = {
@@ -330,12 +430,31 @@ const gameLoop = () => {
 			}
 			
 			gameState.teams[gameState.currentTeam].members = selectedClients
+			
+			currentModeState.timeLeft = 20
 		}
+		
+		currentModeState.timeLeft--
 		
 		if (specifiedSelectedClients.length >= selectedClients.length) {
 			console.log(specifiedSelectedClients.map((client) => client.data.tampering))
 			
 			console.log('Showing investigation results...')
+			
+			gameState.mode = 'showInvestigationResults'
+		}
+		
+		if (currentModeState.timeLeft <= 0) {
+			for (let i = 0; i < selectedClients.length; i++) {
+				if (selectedClients[i].data.tampering === null) {
+					if (selectedClients[i].data.role === 'mafia') {
+						selectedClients[i].data.tampering = true
+					}
+					else selectedClients[i].data.tampering = false
+				}
+			}
+			
+			sendAllClients('message', fastMessage([['> ', '#FFDC00'], ['Crime scene has been skipped for taking too long.', '#EFEFE7']]))
 			
 			gameState.mode = 'showInvestigationResults'
 		}
@@ -348,6 +467,7 @@ const gameLoop = () => {
 		
 		if (firstForMode) {
 			currentTeam.victor = tampers.length >= currentTeam.requiredToTamper ? 'mafia' : 'officers'
+			currentTeam.hasPlayed = true
 			
 			console.log('Team victor: ' + currentTeam.victor)
 			
@@ -380,8 +500,6 @@ const gameLoop = () => {
 		}
 		
 		if (currentModeState.repeated > 7) {
-			gameState.currentTeam++
-
 			gameState.weather = 0
 			
 			sendAllClients('transition', {
@@ -391,9 +509,88 @@ const gameLoop = () => {
 			gameState.mode = 'transition'
 			
 			setTimeout(() => {
-				gameState.mode = 'selecting'
+				gameState.currentTeam++
+				
+				const winner = getWinner()
+				
+				if (winner === null) {
+					gameState.mode = 'selecting'
+				}
+				else {
+					gameState.mode = 'displayWinner'
+				}
 			}, 1000)
 		}
+	}
+	else if (gameState.mode === 'displayWinner') {
+		const winner = getWinner()
+		
+		if (firstForMode) {
+			resetSelecting()
+			
+			console.log('> ' + winner + ' have won.')
+		}
+		
+		gameState.background = 'images/backgrounds/station.png'
+		
+		if (winner === 'mafia') {
+			if (currentModeState.repeated > 3) {
+				gameState.title = {
+					'title': 'MAFIA HAVE WON',
+					'subtitle': 'Mafia were ' + clients.filter((client) => client.data.role === 'mafia').map((client) => client.data.name).join(', '),
+					'boardText': '',
+					'titleColor': '#ED553B',
+					'subtitleColor': '#ED553B',
+					'displayMode': 1
+				}
+			}
+			else {
+				gameState.title = {
+					'title': 'MAFIA HAVE WON',
+					'subtitle': 'The agency has been compromised.',
+					'boardText': '',
+					'titleColor': '#ED553B',
+					'subtitleColor': '#EFEFE7',
+					'displayMode': 1
+				}
+			}
+		}
+		else if (winner === 'officers') {
+			gameState.title = {
+				'title': 'Officers have won.',
+				'subtitle': 'The agency has discovered the mafia.',
+				'boardText': '',
+				'titleColor': '#47AB6C',
+				'subtitleColor': '#EFEFE7',
+				'displayMode': 1
+			}
+		}
+		else {
+			console.log('ERROR BAD WINNER. ' + winner)
+		}
+		
+		if (currentModeState.repeated === 15) {
+			sendAllClients('message', fastMessage([['[i] ', '#FFDC00'], ['The server will be closing soon.', '#EFEFE7']]))
+		}
+		
+		if (currentModeState.repeated >= 30) {
+			console.log('> Game over. Closing server.')
+			
+			process.exit(1)
+		}
+	}
+	
+	if (typeof currentModeState.timeLeft === 'number') {
+		sendAllClients('timer', {
+			'timeLeft': currentModeState.timeLeft,
+			'display': true
+		})
+	}
+	else {
+		sendAllClients('timer', {
+			'timeLeft': -1,
+			'display': false
+		})
 	}
 
 	updateClients()
@@ -422,8 +619,7 @@ const server = net.createServer((socket) => {
 		//console.log('chunk ' + chunk.length + ' server => client')
 	})
 	
-	socket.pipe(abstractor)
-	abstractor.pipe(socket)
+	abstractor.bind(socket)
 	
 	socket.data = {
 		'loggedIn': false,
@@ -455,7 +651,7 @@ const server = net.createServer((socket) => {
 			return
 		}
 
-		if (clients.length >= 5) {
+		if (clients.length >= gameState.size) {
 			abstractor.send('loginStatus', {
 				'success': false,
 				'message': 'This game is full.'
@@ -464,14 +660,14 @@ const server = net.createServer((socket) => {
 			return
 		}
 
-		if (data.name.length > 10) {
+		/*if (data.name.length > 10) {
 			abstractor.send('loginStatus', {
 				'success': false,
 				'message': 'That name is too long.'
 			})
 
 			return
-		}
+		}*/
 		
 		if (clients.findIndex((client) => client.data.name.toLowerCase() === data.name.toLowerCase()) !== -1) {
 			abstractor.send('loginStatus', {
@@ -482,7 +678,7 @@ const server = net.createServer((socket) => {
 			return
 		}
 		
-		if (/[^A-Za-z0-9]/g.test(data.name)) {
+		if (/[^A-Za-z0-9\.]/g.test(data.name)) {
 			abstractor.send('loginStatus', {
 				'success': false,
 				'message': 'Names cannot contain spaces or special characters.'
@@ -493,10 +689,15 @@ const server = net.createServer((socket) => {
 
 		console.log('Login as \'' + data.name + '\' from user.')
 		
-		socket.data.name = data.name
+		socket.data.username = data.name
 		socket.data.loggedIn = true
 		socket.data.skin = ['officer', 'detective'][Math.floor(Math.random() * 2)]
 		socket.data.typing = false
+		
+		socket.data.name = gameState.names[gameState.currentNameIndex]
+		
+		gameState.currentNameIndex++
+		gameState.currentNameIndex %= gameState.names.length
 		
 		abstractor.send('transition', {
 			'ms': 500
@@ -517,7 +718,7 @@ const server = net.createServer((socket) => {
 			updateClients()
 		})
 		
-		sendAllClients('message', fastMessage([['+ ', '#FFDC00'], [socket.data.name, '#FFDC00'], [' has joined the game.', '#EFEFE7']]))
+		sendAllClients('message', fastMessage([['+ ', '#FFDC00'], [socket.data.name, '#FFDC00'], [' has joined the game. (', '#EFEFE7'], [clients.length + ' / ' + gameState.size, '#FFDC00'], [')', '#EFEFE7']]))
 		
 		updateClients()
 	})
@@ -581,11 +782,9 @@ const server = net.createServer((socket) => {
 				}
 			}
 			else if (command === 'stage') {
-				if (socket.data.name === 'ethan') {
-					gameState.mode = segs[1]
-					
-					abstractor.send('message', fastMessage([['DEBUG: Updated stage', '#EFEFE7']]))
-				}
+				gameState.mode = segs[1]
+				
+				abstractor.send('message', fastMessage([['DEBUG: Updated stage', '#EFEFE7']]))
 			}
 			else {
 				abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Error: Unknown command.', '#E83338']]))
@@ -620,7 +819,7 @@ const server = net.createServer((socket) => {
 		
 		const selectClient = clients[data.index]
 		
-		if (selectClient.selected) {
+		if (selectClient.data.selected === true) {
 			selectClient.data.selected = false
 		}
 		else {
@@ -668,6 +867,8 @@ const server = net.createServer((socket) => {
 		}
 		
 		console.log(socket.data.name + ' voted ' + data.value)
+		
+		sendAllClients('message', fastMessage([['> ', '#FFDC00'], [socket.data.name, '#FFDC00'], [' has voted.', '#EFEFE7']]))
 		
 		socket.data.vote = data.value
 		

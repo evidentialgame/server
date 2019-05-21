@@ -13,10 +13,18 @@ def messageSegment private
 string text
 string color
 
+def team private
+string victor
+boolean hasPlayed
+boolean current
+uint size size=8
+uint requiredToTamper size=8
+
 // Server => Client
 
 def updateGame
 list players of=player
+list teams of=team
 string background
 uint weather size=8
 uint vignette size=8
@@ -38,6 +46,11 @@ varint ms
 def message
 list segments of=messageSegment
 
+def setCard
+string cardImage
+string text
+string textColor
+
 def title
 string title
 string subtitle
@@ -45,6 +58,10 @@ string boardText
 string titleColor
 string subtitleColor
 uint displayMode size=8
+
+def timer
+varint timeLeft
+boolean display
 
 // Client => Server
 
