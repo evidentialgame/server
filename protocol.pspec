@@ -17,6 +17,8 @@ def team private
 string victor
 boolean hasPlayed
 boolean current
+list players of=player
+list supporters of=player
 uint size size=8
 uint requiredToTamper size=8
 
@@ -50,6 +52,7 @@ def setCard
 string cardImage
 string text
 string textColor
+string name
 
 def title
 string title
@@ -62,6 +65,12 @@ uint displayMode size=8
 def timer
 varint timeLeft
 boolean display
+
+def suggestSend
+string content
+
+def disconnect
+string message
 
 // Client => Server
 

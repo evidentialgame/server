@@ -4,6 +4,9 @@ const net = require('net')
 
 const {Schema, StreamingAbstractor, types, protospec} = require('protocore')
 
+const chatCensor = require(path.join(__dirname, 'lib', 'chatCensor.js'))
+const Bot = require(path.join(__dirname, 'lib', 'Bot.js'))
+
 const protocolSpec = fs.readFileSync(path.join(__dirname, 'protocol.pspec')).toString()
 
 const abstractorFactory = () => protospec.importAbstractor(protocolSpec)
@@ -39,6 +42,10 @@ const gameState = {
 			'size': 2,
 			'requiredToTamper': 1,
 			'members': [],
+			'voters': {
+				'accept': [],
+				'reject': []
+			},
 			'hasPlayed': false,
 			'victor': null
 		},
@@ -46,6 +53,10 @@ const gameState = {
 			'size': 3,
 			'requiredToTamper': 1,
 			'members': [],
+			'voters': {
+				'accept': [],
+				'reject': []
+			},
 			'hasPlayed': false,
 			'victor': null
 		},
@@ -53,6 +64,10 @@ const gameState = {
 			'size': 2,
 			'requiredToTamper': 1,
 			'members': [],
+			'voters': {
+				'accept': [],
+				'reject': []
+			},
 			'hasPlayed': false,
 			'victor': null
 		},
@@ -60,6 +75,10 @@ const gameState = {
 			'size': 3,
 			'requiredToTamper': 1,
 			'members': [],
+			'voters': {
+				'accept': [],
+				'reject': []
+			},
 			'hasPlayed': false,
 			'victor': null
 		},
@@ -67,13 +86,42 @@ const gameState = {
 			'size': 3,
 			'requiredToTamper': 1,
 			'members': [],
+			'voters': {
+				'accept': [],
+				'reject': []
+			},
 			'hasPlayed': false,
 			'victor': null
 		}
 	],
 	'currentTeam': 0,
-	'names': ['Edward', 'James', 'Riley', 'Harley', 'Ethan', 'Ryan', 'Caden', 'Blair', 'Jordan', 'Bailey', 'Phineas', 'Cornelius', 'Ezekiel'],
-	'currentNameIndex': Math.floor(Math.random() * 13)
+	'names': ['Edward', 'James', 'Riley', 'Harley', 'Ethan', 'Ryan', 'Caden', 'Benjamin', 'Blair', 'Jordan', 'Bailey', 'Phineas', 'Cornelius', 'Ezekiel', 'Connor', 'Nicholas', 'Henry', 'Charles', 'Dylan', 'George', 'Leonardo', 'Deacon', 'Edwin', 'Lakarpatron', 'Tallstag', 'Barnaby', 'Declan', 'Winthrop', 'Sterling', 'Bertram', 'Ace', 'Don'],
+	'crimeScenes': [
+		{
+			'background': 'images/backgrounds/crimescene1.png',
+			'weather': 1
+		},
+		{
+			'background': 'images/backgrounds/crimescene2.png',
+			'weather': 0
+		},
+		{
+			'background': 'images/backgrounds/crimescene3.png',
+			'weather': 1
+		}
+	],
+	'currentCrimeSceneIndex': Math.floor(Math.random() * 2)
+}
+
+gameState.currentNameIndex = Math.floor(Math.random() * gameState.names.length)
+
+const defaultSocketData = {
+	'loggedIn': false,
+	'transferredBytes': 0,
+	'selected': false,
+	'vote': null,
+	'role': 'officer',
+	'tampering': null
 }
 
 const clients = []
@@ -91,12 +139,14 @@ const updateClients = () => {
 			'requiredToTamper': team.requiredToTamper,
 			'hasPlayed': team.hasPlayed,
 			'current': i === gameState.currentTeam,
+			'players': team.members.map((client) => client.data),
+			'supporters': team.voters.accept.map((client) => client.data),
 			'victor': typeof team.victor === 'string' ? team.victor : ''
 		}
 	})
 	
 	sendAllClients('updateGame', {
-		'players': (gameState.mode === 'crimeScene' || gameState.mode === 'showInvestigationResults' ? clients.filter((client) => client.data.selected === true) : clients).map((client) => client.data),
+		'players': (['crimeScene', 'showInvestigationResults', 'transition2'].includes(gameState.mode) ? clients.filter((client) => client.data.selected === true) : clients).map((client) => client.data),
 		'background': gameState.background,
 		'weather': gameState.weather,
 		'vignette': gameState.vignette,
@@ -217,7 +267,8 @@ const gameLoop = () => {
 					clients[i].abstractor.send('setCard', {
 						'cardImage': 'images/sprites/card/' + clients[i].data.skin + '_mafia.png',
 						'textColor': '#ED553B',
-						'text': 'Mafia: ' + displayMafiaList
+						'text': 'Mafia: ' + displayMafiaList,
+						'name': clients[i].data.name
 					})
 				}
 
@@ -237,7 +288,8 @@ const gameLoop = () => {
 					clients[i].abstractor.send('setCard', {
 						'cardImage': 'images/sprites/card/' + clients[i].data.skin + '_innocent.png',
 						'textColor': '#47AB6C',
-						'text': 'Officer'
+						'text': 'Officer',
+						'name': clients[i].data.name
 					})
 				}
 
@@ -262,10 +314,10 @@ const gameLoop = () => {
 			
 			gameState.selecting++
 			
-			gameState.selecting %= clients.length
-			
 			currentModeState.timeLeft = 30
 		}
+		
+		gameState.selecting %= clients.length
 		
 		currentModeState.timeLeft--
 		
@@ -369,11 +421,17 @@ const gameLoop = () => {
 		
 		if (firstForMode) {
 			sendAllClients('message', fastMessage([['> ', '#FFDC00'], ['The vote ', '#EFEFE7'], (passed ? ['passed', '#47AB6C'] : ['failed', '#ED553B']), ['.', '#EFEFE7']]))
-			sendAllClients('message', fastMessage([['> ', '#FFDC00'], ['The vote was rejected by ', '#EFEFE7'], [(againstVoters.length > 0 ? againstVoters.map((client) => client.data.name).join(', ') : 'no one'), '#FFDC00'], ['.', '#EFEFE7']]))
+			//sendAllClients('message', fastMessage([['> ', '#FFDC00'], ['The vote was rejected by ', '#EFEFE7'], [(againstVoters.length > 0 ? againstVoters.map((client) => client.data.name).join(', ') : 'no one'), '#FFDC00'], ['.', '#EFEFE7']]))
 		
 			sendAllClients('setVoteUI', {
 				'display': false
 			})
+			
+			gameState.teams[gameState.currentTeam].voters = {
+				'accept': forVoters,
+				'reject': againstVoters
+			}
+			
 		}
 		
 		gameState.title = {
@@ -414,9 +472,16 @@ const gameLoop = () => {
 			'displayMode': 0
 		}
 		
-		gameState.vignette = 130
-		gameState.background = 'images/backgrounds/crimescene1.png'
-		gameState.weather = 1
+		if (firstForMode) {
+			gameState.vignette = 130
+			const currentCrimeSceneData = gameState.crimeScenes[gameState.currentCrimeSceneIndex]
+			
+			gameState.background = currentCrimeSceneData.background
+			gameState.weather = currentCrimeSceneData.weather
+			
+			gameState.currentCrimeSceneIndex++
+			gameState.currentCrimeSceneIndex %= gameState.crimeScenes.length
+		}
 		
 		const selectedClients = clients.filter((client) => client.data.selected === true)
 		const specifiedSelectedClients = selectedClients.filter((client) => client.data.tampering !== null)
@@ -506,7 +571,7 @@ const gameLoop = () => {
 				'ms': 2000
 			})
 			
-			gameState.mode = 'transition'
+			gameState.mode = 'transition2'
 			
 			setTimeout(() => {
 				gameState.currentTeam++
@@ -576,6 +641,14 @@ const gameLoop = () => {
 		if (currentModeState.repeated >= 30) {
 			console.log('> Game over. Closing server.')
 			
+			sendAllClients('disconnect', {
+				'message': 'This game has ended. Goodbye.'
+			})
+			
+			for (let i = 0; i < clients.length; i++) {
+				clients[i].end()
+			}
+			
 			process.exit(1)
 		}
 	}
@@ -598,37 +671,8 @@ const gameLoop = () => {
 
 setInterval(gameLoop, 1000)
 
-const server = net.createServer((socket) => {
-	const abstractor = abstractorFactory()
-	
-	socket.abstractor = abstractor
-	
-	socket.on('error', (err) => {
-		console.log(err)
-	})
-	
-	socket.on('data', (chunk) => {
-		socket.data.transferredBytes += chunk.length
-		
-		//console.log('chunk ' + chunk.length + ' client => server')
-	})
-	
-	abstractor.on('data', (chunk) => {
-		socket.data.transferredBytes += chunk.length
-		
-		//console.log('chunk ' + chunk.length + ' server => client')
-	})
-	
-	abstractor.bind(socket)
-	
-	socket.data = {
-		'loggedIn': false,
-		'transferredBytes': 0,
-		'selected': false,
-		'vote': null,
-		'role': 'officer',
-		'tampering': null
-	}
+const setupSocket = (socket) => {
+	const abstractor = socket.abstractor
 	
 	abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Welcome! Be friendly in-game.', '#EFEFE7']]))
 	
@@ -696,6 +740,10 @@ const server = net.createServer((socket) => {
 		
 		socket.data.name = gameState.names[gameState.currentNameIndex]
 		
+		if (socket.data.username.toLowerCase() === 'hayden.fargo') {
+			socket.data.name = 'Beef'
+		}
+		
 		gameState.currentNameIndex++
 		gameState.currentNameIndex %= gameState.names.length
 		
@@ -714,6 +762,18 @@ const server = net.createServer((socket) => {
 			console.log('Socket disconnected.')
 			
 			clients.splice(clients.indexOf(socket), 1)
+			
+			sendAllClients('message', fastMessage([['- ', '#FFDC00'], [socket.data.name, '#FFDC00'], [' has left the game.', '#EFEFE7']]))
+			
+			if (['waitingForPlayers', 'displayWinner'].includes(gameState.mode) === false) {
+				const bot = new Bot(socket.data)
+				
+				setupSocket(bot)
+				
+				bot.incomingAbstractor.emit('botReady')
+				
+				clients.push(bot)
+			}
 
 			updateClients()
 		})
@@ -722,13 +782,13 @@ const server = net.createServer((socket) => {
 		
 		updateClients()
 	})
-	
+
 	abstractor.on('setTyping', (data) => {
 		socket.data.typing = data.typing
 		
 		updateClients()
 	})
-	
+
 	abstractor.on('sendChat', (data) => {
 		if (!socket.data.loggedIn) {
 			console.log('- ' + socket.data.name + ': ' + data.message)
@@ -764,6 +824,12 @@ const server = net.createServer((socket) => {
 				
 				const messageContent = segs.slice(2).join(' ')
 				
+				const censorMessageContentResult = chatCensor.censorMessage(messageContent)
+				
+				if (censorMessageContentResult.censored === true) {
+					console.log('Censored whisper to ' + censorMessageContentResult.message)
+				}
+				
 				if (destination) {
 					if (destination === socket) {
 						abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Error: You can\'t whisper to yourself!', '#E83338']]))
@@ -771,11 +837,13 @@ const server = net.createServer((socket) => {
 						return
 					}
 					
-					sendAllClients('message', fastMessage([[socket.data.name, '#FFDC00'], [' whispers to ', '#EFEFE7'], [destination.data.name, '#FFDC00'], ['.', '#EFEFE7']]))
-
-					destination.abstractor.send('message', fastMessage([[socket.data.name, '#FFDC00'], [' > ', '#EFEFE7'], ['me', '#FFDC00'], [': ' + messageContent, '#EFEFE7']]))
+					//sendAllClients('message', fastMessage([[socket.data.name, '#FFDC00'], [' whispers to ', '#EFEFE7'], [destination.data.name, '#FFDC00'], ['.', '#EFEFE7']]))
 					
-					abstractor.send('message', fastMessage([['me', '#FFDC00'], [' > ', '#EFEFE7'], [destination.data.name, '#FFDC00'], [': ' + messageContent, '#EFEFE7']]))
+					sendAllClients('message', fastMessage([['Someone whispers.', '#EFEFE7']]))
+
+					destination.abstractor.send('message', fastMessage([[socket.data.name, '#FFDC00'], [' > ', '#EFEFE7'], ['me', '#FFDC00'], [': ' + censorMessageContentResult.message, '#EFEFE7']]))
+					
+					abstractor.send('message', fastMessage([['me', '#FFDC00'], [' > ', '#EFEFE7'], [destination.data.name, '#FFDC00'], [': ' + censorMessageContentResult.message, '#EFEFE7']]))
 				}
 				else {
 					abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Error: That player doesn\'t exist.', '#E83338']]))
@@ -786,6 +854,15 @@ const server = net.createServer((socket) => {
 				
 				abstractor.send('message', fastMessage([['DEBUG: Updated stage', '#EFEFE7']]))
 			}
+			else if (command === 'joinbot') {
+				abstractor.send('message', fastMessage([['DEBUG: Joining bot.', '#EFEFE7']]))
+				
+				const bot = new Bot(Object.assign({}, defaultSocketData))
+				
+				setupSocket(bot)
+				
+				bot.incomingAbstractor.emit('botReady')
+			}
 			else {
 				abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Error: Unknown command.', '#E83338']]))
 			}
@@ -795,24 +872,28 @@ const server = net.createServer((socket) => {
 		
 		console.log('+ ' + socket.data.name + ': ' + data.message)
 		
+		const censoredResult = chatCensor.censorMessage(data.message)
+		
+		if (censoredResult.censored === true) {
+			console.log('Censored to: ' + censoredResult.message)
+		}
+		
 		for (let i = 0; i < clients.length; i++) {
-			clients[i].abstractor.send('message', fastMessage([['[', '#EFEFE7'], [socket.data.name, '#FFDC00'], ['] ', '#EFEFE7'], [data.message, '#EFEFE7']]))
+			clients[i].abstractor.send('message', fastMessage([['[', '#EFEFE7'], [socket.data.name, '#FFDC00'], ['] ', '#EFEFE7'], [censoredResult.message, '#EFEFE7']]))
 		}
 	})
-	
+
 	abstractor.on('select', (data) => {
-		if (data.index > clients.length - 1) {
+		if (data.index > clients.length - 1 || data.index < 0) {
 			socket.abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Error: Player index ' + data.index + ' ( / ' + clients.length + ') out of bounds! Are you experiencing latency?', '#E83338']]))
 			
 			return
 		}
 
-		if (gameState.mode !== 'selecting') {
-			return
-		}
-		
-		if (clients.indexOf(socket) !== gameState.selecting) {
-			socket.abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Error: You aren\'t able to select currently.', '#E83338']]))
+		if (gameState.mode !== 'selecting' || clients.indexOf(socket) !== gameState.selecting) {
+			abstractor.send('suggestSend', {
+				'content': '/w ' + clients[data.index].data.name + ' '
+			})
 			
 			return
 		}
@@ -828,7 +909,7 @@ const server = net.createServer((socket) => {
 		
 		gameLoop()
 	})
-	
+
 	abstractor.on('setTampering', (data) => {
 		if (socket.data.tampering !== null) {
 			socket.abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Error: You\'ve already selected.', '#E83338']]))
@@ -858,7 +939,7 @@ const server = net.createServer((socket) => {
 			'canTamper': true
 		})
 	})
-	
+
 	abstractor.on('vote', (data) => {
 		if (socket.data.vote !== null) {
 			socket.abstractor.send('message', fastMessage([['> ', '#FFDC00'], ['Error: You\'ve already voted.', '#E83338']]))
@@ -868,7 +949,7 @@ const server = net.createServer((socket) => {
 		
 		console.log(socket.data.name + ' voted ' + data.value)
 		
-		sendAllClients('message', fastMessage([['> ', '#FFDC00'], [socket.data.name, '#FFDC00'], [' has voted.', '#EFEFE7']]))
+		sendAllClients('message', fastMessage([['> ', '#FFDC00'], [socket.data.name, '#FFDC00'], [' has voted to ', '#EFEFE7'], [data.value === true ? 'accept' : 'reject', data.value === true ? '#47AB6C' : '#ED553B'], ['.', '#EFEFE7']]))
 		
 		socket.data.vote = data.value
 		
@@ -878,6 +959,34 @@ const server = net.createServer((socket) => {
 		
 		gameLoop()
 	})
+}
+
+const server = net.createServer((socket) => {
+	const abstractor = abstractorFactory()
+	
+	socket.abstractor = abstractor
+	
+	socket.on('error', (err) => {
+		console.log(err)
+	})
+	
+	socket.on('data', (chunk) => {
+		socket.data.transferredBytes += chunk.length
+		
+		//console.log('chunk ' + chunk.length + ' client => server')
+	})
+	
+	abstractor.on('data', (chunk) => {
+		socket.data.transferredBytes += chunk.length
+		
+		//console.log('chunk ' + chunk.length + ' server => client')
+	})
+	
+	abstractor.bind(socket)
+	
+	socket.data = Object.assign({}, defaultSocketData)
+	
+	setupSocket(socket)
 })
 
 server.listen(8080, () => {
